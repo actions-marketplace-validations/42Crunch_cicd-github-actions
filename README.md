@@ -1,17 +1,19 @@
-# GitHub Action: 42Crunch REST API Conformance and Security Testing
+# GitHub Action: 42Crunch REST Dynamic API Conformance Enforcement
 
 The REST API Dynamic Security Testing action can be used to enforce compliance to 42Crunch quality security gates, produce SARIF reports from raw 42Crunch reports and upload SARIF results to GitHub Code Scanning.
 
-The action assumes that you have already run a scan, either via Docker or through [42Crunch Scand Manager.](https://github.com/42Crunch/scand-manager)
+![](https://img.shields.io/badge/Note-purple)**This action can be used to analyze scan reports. It assumes that you have already run a scan, either via Docker or through [42Crunch Scand Manager.](https://github.com/42Crunch/scand-manager)** 
 
 42Crunch  [API Conformance Scan](https://docs.42crunch.com/latest/content/concepts/api_contract_conformance_scan.htm) serves two purposes:
 
-- Testing the resilience and behavior of APIs by automatically generating security tests from the APIs OpenAPI (aka Swagger) definition. Tests are injecting bad payloads, tokens and use invalid HTTP verbs and path to detect vulnerabilities, especially those associated to the [OWASP API Security Top 10](https://apisecurity.io/owasp-api-security-top-10/owasp-api-security-top-10-project/).
+- Testing the resilience and behavior of APIs by automatically generating security tests from the APIs OpenAPI (a.k.a Swagger) definition. Tests are injecting bad payloads, tokens and use invalid HTTP verbs and path to detect vulnerabilities, especially those associated to the [OWASP API Security Top 10](https://apisecurity.io/owasp-api-security-top-10/owasp-api-security-top-10-project/).
 - Validating that the implementation of the API is indeed in line with its established contract.
 
 ## Security Quality Gates
 
-Security quality gates are used to enforce security compliance across the enterprise by analyzing a conformance scan report and comparing it across the rules established centrally. Key examples include:
+[Security quality gates](https://docs.42crunch.com/latest/content/concepts/security_quality_gates.htm) are used to enforce security compliance across the enterprise by analyzing a conformance scan report and comparing it across the rules established centrally. 
+
+Key examples include:
 
 - Preventing APIs with API1 through API 5 vulnerabilities from being deployed
 - Preventing APIs with high rish issues from being deployed 
@@ -23,7 +25,7 @@ Additionally, you can export 42Crunch native JSON report format as a SARIF file.
 
 ## GitHub Code Scanning 
 
-Finally, you can upload the SARIF results to GitHub Code Scanning, assuming Code Scanning is [enabled](https://docs.github.com/en/code-security/code-scanning/enabling-code-scanning) on your repository. Results will be shown on the `Security> Code Scanning` tab, where you can filter results by tool and by PR/Branch.
+Finally, you can publish the SARIF results to GitHub Code Scanning, assuming Code Scanning is [enabled](https://docs.github.com/en/code-security/code-scanning/enabling-code-scanning) on your repository. Results will be shown on the `Security` tab, where you can filter results by tool and by PR/Branch.
 
 ![](images/CodeScanningPage.jpg)
 
@@ -51,9 +53,45 @@ You can customize the action execution through various parameters:
 | check-sqg         | No        | Check whether reports conforms to platform SQGs              | True                             |
 | github-token      | No        | Access to GitHub Code Scanning                               | `${{ github.token }}`            |
 
-### Sample Setup 
+## Examples
 
-A typically which runs the scan and then analyzes the results would look like this:
+### Individual step example
+
+A typical new step in an existing workflow would look like this:
+
+- Set permissions to allow uploads to Github Code Scanning 
+- Check scan reports for compliance: for each of the APIs which have been previously audited, check the conformance scan report results against security gates and upload SARIF results to Github code scanning.
+
+```yaml
+run_42c_scan:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:        
+      contents: read # for actions/checkout to fetch code
+      security-events: write # To upload results to Github Code Scanning
+steps:
+		...
+		- name: Check scan report compliance
+        uses: 42crunch/cicd-github-actions@v1
+        with:
+          api-token: ${{ secrets.API_TOKEN }}
+          platform-url: ${{ env.PLATFORM_URL}}
+          audit-report-path: audit-action-report-${{ github.run_id }}.json
+          convert-to-sarif: scan-report-${{ github.run_id }}.sarif
+          upload-sarif: true
+          check-sqg: true
+        uses: 42Crunch/api-security-scan-action-freemium@v1
+
+```
+
+### Full workflow example
+
+A typical workflow which executes the scan and then analyzes the results via this action would look like this:
+
+* Obtain API credential. In this example, the API exposes a login endpoint which requires a user and password. The pipeline leverages secrets and environments to store this information.
+* Update the scan configuration on the platform and obtain the corresponding [scan token](https://docs.42crunch.com/latest/content/tasks/scan_api_conformance_scan_v1.htm#scrollNav-6). 
+* Run the scan leveraging [scand manager](https://github.com/42Crunch/scand-manager)
+* Check the scan report for compliance: this action leverages the audit task report execution to find the API in the 42Crunch platform. It then waits for the scan task to complete and analyzes the report against the security gates defined at the platform level.
 
 
 ```yaml
@@ -65,8 +103,8 @@ steps:
         run: | 
           login_response=$(python .42c/scripts/pixi-login.py -u ${{ vars.PIXI_USER_NAME }} -p ${{ secrets.USER_PASS }} -t ${{ vars.PIXI_TARGET_URL }})
           echo "PIXI_TOKEN=$login_response" >> $GITHUB_OUTPUT
-      - name: upload_v1_scan_config
-        id: upload_v1_scan_config
+      - name: update_scan_config
+        id: update_scan_config
         run: | 
           scanconfig_response=$(python .42c/scripts/scan_v1_config.py ${{github.server_url}}/${{ github.repository }} ${{ github.ref }} ${{ secrets.API_TOKEN }} '{$ACCESS_TOKEN}' ${{env.PLATFORM_URL}})
           echo "SCANV1_TOKEN=$scanconfig_response" >> $GITHUB_OUTPUT
@@ -81,8 +119,8 @@ steps:
           method: POST
           contentType: "application/json"
           customHeaders: '{"Accept": "application/json"}'
-          data: '{"token": "${{ steps.upload_v1_scan_config.outputs.SCANV1_TOKEN }}","name": "scand-${{ github.run_id }}-${{ github.run_attempt }}","platformService": "${{ env.PLATFORM_SERVICE_ENDPOINT }}","scandImage": "${{vars.SCAN_AGENT_V1}}","expirationTime": 600,"env": { "SECURITY_ACCESS_TOKEN": "${{ steps.get_pixi_token.outputs.PIXI_TOKEN }}"}}'
-      - name: upload scan results
+          data: '{"token": "${{ steps.update_scan_config.outputs.SCANV1_TOKEN }}","name": "scand-${{ github.run_id }}-${{ github.run_attempt }}","platformService": "${{ env.PLATFORM_SERVICE_ENDPOINT }}","scandImage": "${{vars.SCAN_AGENT_V1}}","expirationTime": 600,"env": { "SECURITY_ACCESS_TOKEN": "${{ steps.get_pixi_token.outputs.PIXI_TOKEN }}"}}'
+      - name: check scan results
         uses: 42crunch/cicd-github-actions@v1
         with:
           api-token: ${{ secrets.API_TOKEN }}
