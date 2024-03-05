@@ -1,13 +1,13 @@
-# GitHub Action: 42Crunch REST Dynamic API Conformance Enforcement
+# GitHub Action: 42Crunch REST API Conformance Enforcement
 
-The REST API Dynamic Security Testing action can be used to enforce compliance to 42Crunch quality security gates, produce SARIF reports from raw 42Crunch reports and upload SARIF results to GitHub Code Scanning.
-
-![](https://img.shields.io/badge/Note-purple)**This action can be used to analyze scan reports. It assumes that you have already run a scan, either via Docker or through [42Crunch Scand Manager.](https://github.com/42Crunch/scand-manager)** 
+This action can be used to enforce compliance to 42Crunch security quality gates, produce SARIF reports from raw 42Crunch dynamic scan reports and upload SARIF results to GitHub Code Scanning.
 
 42Crunch  [API Conformance Scan](https://docs.42crunch.com/latest/content/concepts/api_contract_conformance_scan.htm) serves two purposes:
 
 - Testing the resilience and behavior of APIs by automatically generating security tests from the APIs OpenAPI (a.k.a Swagger) definition. Tests are injecting bad payloads, tokens and use invalid HTTP verbs and path to detect vulnerabilities, especially those associated to the [OWASP API Security Top 10](https://apisecurity.io/owasp-api-security-top-10/owasp-api-security-top-10-project/).
 - Validating that the implementation of the API is indeed in line with its established contract.
+
+![](https://img.shields.io/badge/Important-purple)**This action can be used to <u>analyze</u> scan reports. It assumes that you have already run a scan, either via Docker or through [42Crunch scand manager.](https://github.com/42Crunch/scand-manager)**
 
 ## Security Quality Gates
 
